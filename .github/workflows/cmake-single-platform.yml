@@ -1,0 +1,50 @@
+# This workflow builds a CMake project on a single platform (Ubuntu).
+# For multi-platform support, see: https://github.com/actions/starter-workflows/blob/main/ci/cmake-multi-platform.yml
+
+name: CMake CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up CMake
+      run: |
+        echo "Setting up CMake..."
+        sudo apt-get update
+        sudo apt-get install -y cmake # Ensure CMake is installed
+
+    - name: Configure CMake
+      run: |
+        echo "Configuring CMake..."
+        cmake -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DCMAKE_EXPORT_COMPILE_COMMANDS=YES
+
+    - name: Build
+      run: |
+        echo "Building the project..."
+        cmake --build ${{ github.workspace }}/build --config ${{ env.BUILD_TYPE }} -- -j$(nproc) # Use all available CPU cores for faster builds
+
+    - name: Test
+      working-directory: ${{ github.workspace }}/build
+      run: |
+        echo "Running tests..."
+        ctest -C ${{ env.BUILD_TYPE }} --output-on-failure # Output test results even if they fail
+
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: Build Artifacts
+        path: ${{ github.workspace }}/build # Adjust this path if necessary
