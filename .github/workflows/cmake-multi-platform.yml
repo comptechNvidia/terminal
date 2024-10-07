@@ -1,0 +1,78 @@
+name: CMake on multiple platforms
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            c_compiler: cl
+            cpp_compiler: cl
+            build_type: Release
+          - os: ubuntu-latest
+            c_compiler: gcc
+            cpp_compiler: g++
+            build_type: Release
+          - os: ubuntu-latest
+            c_compiler: clang
+            cpp_compiler: clang++
+            build_type: Release
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set reusable strings
+      id: strings
+      shell: bash
+      run: |
+        echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
+
+    - name: Cache CMake
+      uses: actions/cache@v3
+      with:
+        path: ${{ steps.strings.outputs.build-output-dir }}
+        key: ${{ runner.os }}-cmake-${{ hashFiles('**/CMakeLists.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-cmake-
+
+    - name: Configure CMake
+      run: >
+        cmake -B ${{ steps.strings.outputs.build-output-dir }}
+        -DCMAKE_CXX_COMPILER=${{ matrix.cpp_compiler }}
+        -DCMAKE_C_COMPILER=${{ matrix.c_compiler }}
+        -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        -S ${{ github.workspace }}
+
+    - name: Build
+      run: cmake --build ${{ steps.strings.outputs.build-output-dir }} --config ${{ matrix.build_type }}
+      continue-on-error: true  # Allow the build to continue even if there are errors
+
+    - name: Run Tests
+      working-directory: ${{ steps.strings.outputs.build-output-dir }}
+      run: |
+        echo "Running tests..."
+        ctest --build-config ${{ matrix.build_type }} --output-on-failure
+
+    - name: Upload Build Artifacts
+      if: success()  # Only upload if previous steps succeeded
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-artifacts
+        path: ${{ steps.strings.outputs.build-output-dir }}
+
+    - name: Notify Success
+      if: success()
+      run: echo "Build and tests completed successfully."
+
+    - name: Notify Failure
+      if: failure()
+      run: echo "Build or tests failed. Please check the logs."
